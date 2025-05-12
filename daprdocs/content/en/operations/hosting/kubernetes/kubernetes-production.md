@@ -12,15 +12,17 @@ Dapr support for Kubernetes is aligned with [Kubernetes Version Skew Policy](htt
 
 Use the following resource settings as a starting point. Requirements vary depending on cluster size, number of pods, and other factors. Perform individual testing to find the right values for your environment. In production, it's recommended to not add memory limits to the Dapr control plane components to avoid `OOMKilled` pod statuses.
 
-| Deployment  | CPU | Memory
-|-------------|-----|-------
-| **Operator**  | Limit: 1, Request: 100m | Request: 100Mi
+| Deployment           | CPU | Memory
+|----------------------|-----|-------
+| **Operator**         | Limit: 1, Request: 100m | Request: 100Mi
 | **Sidecar Injector** | Limit: 1, Request: 100m  | Request: 30Mi
-| **Sentry**    | Limit: 1, Request: 100m  | Request: 30Mi
-| **Placement** | Limit: 1, Request: 250m  | Request: 75Mi
+| **Sentry**           | Limit: 1, Request: 100m  | Request: 30Mi
+| **Placement**        | Limit: 1, Request: 250m  | Request: 75Mi
+| **Scheduler**        | Limit: 1, Request: 250m  | Request: 250Mi
 
 {{% alert title="Note" color="primary" %}}
-For more information, refer to the Kubernetes documentation on [CPU and Memory resource units and their meaning](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#resource-units-in-kubernetes).
+- The Scheduler resource usage is highly dependent on actual usage patterns in the Jobs API, workloads, or actors; refer to the etcd [recommendations](https://etcd.io/docs/v3.5/op-guide/hardware/) for guidance.
+- For more information, refer to the Kubernetes documentation on [CPU and Memory resource units and their meaning](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#resource-units-in-kubernetes).
 {{% /alert %}}
 
 ### Helm
@@ -35,9 +37,10 @@ For local/dev installations, you might want to skip configuring the `resources` 
 
 The following Dapr control plane deployments are optional:
 
-- **Placement**: For using Dapr Actors
-- **Sentry**: For mTLS for service-to-service invocation
 - **Dashboard**: For an operational view of the cluster
+- **Sentry**: For mTLS for service-to-service invocation
+- **Placement**: For using Dapr Actors
+- **Scheduler**: Used as persistance layer for Jobs, Workflows, and Actor reminders
 
 ## Sidecar resource settings
 
@@ -97,11 +100,11 @@ For an existing Dapr deployment, [you can enable HA mode in a few extra steps]({
 
 ### Individual service HA Helm configuration
 
-You can configure HA mode via Helm across all services by setting the `global.ha.enabled` flag to `true`. By default, `--set global.ha.enabled=true` is fully respected and cannot be overridden, making it impossible to simultaneously have either the placement or scheduler service as a single instance. 
+You can enable HA mode for all control plane services by setting `global.ha.enabled=true` in Helm. When this global flag is enabled, all HA-capable services (including placement and scheduler) will run with multiple replicas, and you cannot scale individual services down to a single instance.
 
-> **Note:** HA for scheduler and placement services is not the default setting. 
+> **Note:** The scheduler service always runs in HA mode when deployed on Kubernetes. However, HA for the placement service is not enabled by default.
 
-To scale scheduler and placement to three instances independently of the `global.ha.enabled` flag, set `global.ha.enabled` to `false` and `dapr_scheduler.ha` and `dapr_placement.ha` to `true`. For example:
+To scale placement to three instances independently of the `global.ha.enabled` flag, set `global.ha.enabled` to `false` and `dapr_placement.ha` to `true`. For example:
 
    ```bash
    helm upgrade --install dapr dapr/dapr \
@@ -109,7 +112,6 @@ To scale scheduler and placement to three instances independently of the `global
     --namespace dapr-system \
     --create-namespace \
     --set global.ha.enabled=false \
-    --set dapr_scheduler.ha=true \
     --set dapr_placement.ha=true \
     --wait
    ```
